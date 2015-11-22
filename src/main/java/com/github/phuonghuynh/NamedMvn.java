@@ -1,18 +1,18 @@
 package com.github.phuonghuynh;
 
-import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
-import org.apache.commons.io.FileUtils;
+import com.github.phuonghuynh.io.SuffixDirectoryFilter;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.shared.invoker.*;
 import org.codehaus.plexus.util.StringUtils;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Collection;
+import java.util.Arrays;
 
 /**
  * Compress files
@@ -22,29 +22,32 @@ import java.util.Collection;
 @Mojo(name = "named-mvn")
 public class NamedMvn extends AbstractMojo {
 
-  @Parameter(property = "workingDirectory", required = true)
+  public static final String SUFFIX = "suffix";
+  public static final String PREFIX = "prefix";
+
+  private final Log log;
+
+  /**
+   * Working directory, default is current directory
+   */
+  @Parameter(property = "workingDirectory", required = false)
   private String workingDirectory;
 
   /**
-   * Not specified means #workingDirectory
+   * Name of maven projects
    */
-  @Parameter(property = "outputDirectory", required = false)
-  private String outputDirectory;
+  @Parameter(property = "name", required = true)
+  private String name;
 
   /**
-   * A csv string represent filter extensions. Not specified means all files
+   * Type of name, value should be "prefix", "suffix" (default value)
    */
-  @Parameter(property = "filterExt")
-  private String filterExt;
+  @Parameter(property = "type", required = false)
+  private String type;
 
-  @Parameter(property = "includeSubDirectories", defaultValue = "true")
-  private boolean includeSubDirectories;
-
-  /**
-   * A string represent output file extension
-   */
-  @Parameter(property = "outputExt", defaultValue = "gz")
-  private String outputExt;
+  public NamedMvn() {
+    log = getLog();
+  }
 
   /**
    * Main processing
@@ -55,33 +58,40 @@ public class NamedMvn extends AbstractMojo {
    */
   public void execute() throws MojoExecutionException, MojoFailureException {
     try {
-      File workingDir = new File(workingDirectory);
-      workingDirectory = workingDir.getCanonicalPath();
-      if (StringUtils.isEmpty(outputDirectory)) {
-        outputDirectory = workingDirectory;
-        getLog().info(
-          String.format("[outputDirectory] not specified => then set it to [workingDirecotry=%s]",
-            workingDirectory));
+
+      if (StringUtils.isBlank(workingDirectory)) {
+        workingDirectory = ".";
       }
 
-      Collection<File> files = FileUtils.listFiles(workingDir, filterExt != null ? filterExt.replaceAll(" ", "")
-        .split(",") : null, includeSubDirectories);
-      for (File file : files) {
-        String fullpath = file.getCanonicalPath();
-        getLog().info(String.format("Processing file %s", fullpath));
-        File zFile = new File(outputDirectory + "/" + file.getCanonicalPath().replaceFirst(workingDirectory, "")
-          + "." + outputExt);
-        zFile.getParentFile().mkdirs();
-        GzipCompressorOutputStream gzip = new GzipCompressorOutputStream(new FileOutputStream(zFile));
-        gzip.write(FileUtils.readFileToByteArray(file));
-        getLog().info(String.format("Compressing to %s", zFile.getAbsolutePath()));
-        gzip.close();
+      if (!PREFIX.equalsIgnoreCase(type)) {
+        type = SUFFIX;
+      }
+
+      File workingDir = new File(workingDirectory);
+      String workingDirPath = workingDir.getCanonicalPath();
+      String[] projectDirs = SUFFIX.equalsIgnoreCase(type) ? workingDir.list(new SuffixDirectoryFilter(name)) : new String[]{};
+
+      for (int i = 0; i < projectDirs.length; i++) {
+        try {
+          log.debug("Execute project " + projectDirs[i]);
+          InvocationRequest request = new DefaultInvocationRequest();
+          request.setPomFile(new File(String.format("%s/%s/pom.xml", workingDirPath, projectDirs[i])));
+          request.setGoals(Arrays.asList("clean", "install"));
+
+          Invoker invoker = new DefaultInvoker();
+          InvocationResult invocationResult = invoker.execute(request);
+          if (invocationResult.getExitCode() != 0) {
+            throw new MavenInvocationException("Build failed.", invocationResult.getExecutionException());
+          }
+        }
+        catch (MavenInvocationException e) {
+          log.error("Failed execute project " + projectDirs[i], e);
+          throw new IllegalStateException("Failed execute project " + projectDirs[i], e);
+        }
       }
     }
     catch (IOException e) {
-      throw new MojoExecutionException(String.format(
-        "Error processing, params : \n [workingDirectory = %s] \n  [outputDirectory = %s] ", workingDirectory,
-        outputDirectory), e);
+      log.error("Invalid working directory", e);
     }
   }
 }
