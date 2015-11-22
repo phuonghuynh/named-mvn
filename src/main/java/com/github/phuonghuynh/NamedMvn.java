@@ -15,7 +15,7 @@ import java.io.IOException;
 import java.util.Arrays;
 
 /**
- * Compress files
+ * Build maven projects by name
  *
  * @author phuonghqh
  */
