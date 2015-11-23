@@ -58,7 +58,7 @@ public class NamedMvn extends AbstractMojo {
    */
   public void execute() throws MojoExecutionException, MojoFailureException {
     try {
-
+      log.debug("Running named-mvn plugin");
       if (StringUtils.isBlank(workingDirectory)) {
         workingDirectory = ".";
       }
@@ -67,9 +67,15 @@ public class NamedMvn extends AbstractMojo {
         type = SUFFIX;
       }
 
+      log.debug("Configuration: ");
+      log.debug("=> workingDirectory: " + workingDirectory);
+      log.debug("=> type: " + type);
+      log.debug("=> name: " + name);
+
       File workingDir = new File(workingDirectory);
       String workingDirPath = workingDir.getCanonicalPath();
       String[] projectDirs = SUFFIX.equalsIgnoreCase(type) ? workingDir.list(new SuffixDirectoryFilter(name)) : new String[]{};
+      log.debug("Found " + projectDirs.length + " projects.");
 
       for (int i = 0; i < projectDirs.length; i++) {
         try {
