@@ -79,7 +79,7 @@ public class NamedMvn extends AbstractMojo {
 
       for (int i = 0; i < projectDirs.length; i++) {
         try {
-          log.debug("Execute project " + projectDirs[i]);
+          log.debug("Execute project [" + projectDirs[i].toUpperCase() + "]");
           InvocationRequest request = new DefaultInvocationRequest();
           request.setPomFile(new File(String.format("%s/%s/pom.xml", workingDirPath, projectDirs[i])));
           request.setGoals(Arrays.asList("clean", "install"));
